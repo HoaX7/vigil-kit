@@ -1,0 +1,47 @@
+# Env. Production values are imported into Fly with `fly secrets import`, so a
+# .env.prod is a real file on real machines: it must never be committed.
+.env
+.env.local
+.env.prod
+.env.production
+.env.*.local
+!.env.example
+
+# Node
+node_modules/
+dist/
+.astro/
+.output/
+.turbo/
+.cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Go
+/bin/
+*.test
+*.out
+coverage.out
+vendor/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Deploy tooling state
+.wrangler/
+.fly/
+apps/*/dist/
+packages/*/dist/
+
+# Local data
+/data/
+/volumes/
+
+# Claude
+.claude/settings.local.json
+

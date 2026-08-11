@@ -1,0 +1,70 @@
+# Publishes to npm when a version tag is pushed.
+#
+#   npm version patch        # bumps package.json, commits, tags vX.Y.Z
+#   git push --follow-tags
+#
+# No NPM_TOKEN anywhere. Publishing uses npm Trusted Publishing: the job asks
+# GitHub for a short-lived OIDC token, npm verifies it came from THIS repo and
+# THIS workflow file, and mints a one-off credential for the publish. There is
+# no long-lived secret to leak, and a fork or another workflow cannot publish.
+# The same handshake signs provenance, so the npm page proves which commit and
+# workflow produced the tarball.
+#
+# One-time setup on npmjs.com (package or org settings → Trusted Publishing):
+# repo `HoaX7/vigil-sdk`, workflow `release.yml`.
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write # the OIDC exchange; this line is what replaces the token
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: ts }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1+; node 22 bundles npm 10.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      # prepublishOnly runs the full test suite again right here. Provenance
+      # is asked for here rather than in package.json, because only a CI run
+      # has an OIDC provider to attest with; a laptop publish would fail on it.
+      - run: npm publish --provenance --access public
+
+  # The GitHub Release for the tag, its body copied from CHANGELOG.md.
+  #
+  # Auto-generated notes would be empty here: they list merged PRs, and this
+  # repo is pushed to directly. The changelog section is written by hand at
+  # release time, so this job only has to publish it. Separate job because it
+  # needs contents: write, which the publish job deliberately does not have.
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract this version's changelog section
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## " ver "$" { on=1; next }
+            /^## / && on { exit }
+            on { print }
+          ' ts/CHANGELOG.md > notes.md
+          # An empty body would publish a blank release; failing here instead
+          # reminds the releaser to write the entry.
+          test -s notes.md || { echo "no CHANGELOG.md section for $VERSION"; exit 1; }
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md

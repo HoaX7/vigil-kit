@@ -1,0 +1,64 @@
+{
+  "name": "@hoax7/vigil-sdk",
+  "version": "0.1.2",
+  "description": "Report every shard of your Discord bot to Vigil in one line.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "discord",
+    "discord.js",
+    "sharding",
+    "monitoring",
+    "uptime",
+    "vigil"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node test/adapters.test.mjs && npm run test:types",
+    "test:types": "tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext test/types.check.ts",
+    "prepublishOnly": "npm test"
+  },
+  "peerDependencies": {
+    "discord.js": "^14.0.0"
+  },
+  "peerDependenciesMeta": {
+    "discord.js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HoaX7/vigil-sdk.git",
+    "directory": "ts"
+  },
+  "homepage": "https://tryvigil.dev",
+  "bugs": "https://github.com/HoaX7/vigil-sdk/issues",
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "author": {
+    "url": "https://github.com/HoaX7",
+    "name": "HoaX7"
+  }
+}
