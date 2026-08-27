@@ -369,8 +369,36 @@ async function teamList(): Promise<{ teams: TeamRow[]; activeId: string | null }
 }
 
 export async function usage(p: Parsed): Promise<void> {
-  const u = await trpcQuery("org.usage");
-  out(p, u, () => renderKV(u));
+  const u = (await trpcQuery("org.usage")) as {
+    plan?: string;
+    active_monitors?: number;
+    max_monitors?: number;
+    min_interval_seconds?: number;
+    max_status_pages?: number;
+    retention_days?: number;
+    channel_count?: number;
+    channels?: string[];
+    subscriber_count?: number;
+    max_subscribers?: number;
+    open_incidents?: number;
+    seats?: { members?: number; memberSeats?: number; notifyMembers?: number; notifySeats?: number };
+  } | null;
+  out(p, u, () => {
+    const d = u ?? {};
+    const unlimited = (n: number | undefined) => (n === -1 ? "unlimited" : String(n ?? "?"));
+    say(`Plan            ${d.plan ?? "free"}`);
+    say(`Monitors        ${d.active_monitors ?? 0}/${unlimited(d.max_monitors)} active, fastest interval ${d.min_interval_seconds ?? "?"}s`);
+    say(`Status pages    up to ${unlimited(d.max_status_pages)}`);
+    say(`Subscribers     ${d.subscriber_count ?? 0}/${unlimited(d.max_subscribers)}`);
+    if (d.seats) {
+      say(`Seats           ${d.seats.members ?? 0}/${d.seats.memberSeats ?? 0} members, ${d.seats.notifyMembers ?? 0}/${d.seats.notifySeats ?? 0} alert only`);
+    }
+    say(`Alert channels  ${d.channel_count ?? 0} configured, ${d.channels?.length ?? 0} kinds on the plan`);
+    say(`Open incidents  ${d.open_incidents ?? 0}`);
+    say(`Retention       ${d.retention_days ?? "?"} days of check history`);
+    say("");
+    say("Full breakdown: https://tryvigil.dev/dashboard/usage");
+  });
 }
 
 export async function upgrade(p: Parsed): Promise<void> {

@@ -233,14 +233,27 @@ async function channels(p: Parsed): Promise<void> {
 }
 
 function update(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("sh", ["-c", `curl -fsSL ${INSTALL_URL} | sh`], {
-      stdio: "inherit",
-      env: { ...process.env, VIGIL_UPDATE: "1" },
-    });
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new CliError("update failed"))));
-    child.on("error", () => reject(new CliError(`update failed. Run: curl -fsSL ${INSTALL_URL} | sh`)));
-  });
+  return trackStep("Updating vigil…", () =>
+    new Promise((resolve, reject) => {
+      const child = spawn("sh", ["-c", `curl -fsSL ${INSTALL_URL} | sh`], {
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, VIGIL_UPDATE: "1" },
+      });
+      let output = "";
+      child.stdout?.on("data", (d: Buffer) => (output += d.toString()));
+      child.stderr?.on("data", (d: Buffer) => (output += d.toString()));
+      child.on("exit", (code) => {
+        const text = output.trim();
+        if (code === 0) {
+          if (text) say(text);
+          resolve();
+        } else {
+          reject(new CliError(text || "update failed"));
+        }
+      });
+      child.on("error", () => reject(new CliError(`update failed. Run: curl -fsSL ${INSTALL_URL} | sh`)));
+    }),
+  );
 }
 
 async function promptYes(question: string): Promise<boolean> {
