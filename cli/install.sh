@@ -64,7 +64,7 @@ esac
 # CLI install. Set VIGIL_NO_SKILLS=1 to skip.
 if [ -z "$VIGIL_NO_SKILLS" ] && command -v npx >/dev/null 2>&1 && { [ -f "package.json" ] || [ -d ".git" ]; }; then
   echo ""
-  echo "Adding the Vigil agent skills to this project…"
+  echo "Adding the Vigil agent skills to this project (works with Claude Code, Cursor, opencode, Windsurf and more)…"
   if npx -y skills add HoaX7/vigil-kit < /dev/null; then
     echo "Agent skills installed. Coding agents in this project can now set up Vigil."
   else
