@@ -30,7 +30,7 @@ mkdir -p "$BIN_DIR"
 
 TMP="$(mktemp)"
 curl -fsSL "$BASE_URL/vigil.mjs" -o "$TMP"
-head -c 2 "$TMP" | grep -q '#!' || {
+head -n 1 "$TMP" | grep -q '^#!/usr/bin/env node' || {
   echo "Error: download from $BASE_URL/vigil.mjs did not look like the CLI." >&2
   rm -f "$TMP"
   exit 1
