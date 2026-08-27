@@ -1,7 +1,11 @@
 # Publishes to npm when a version tag is pushed.
 #
-#   npm version patch        # bumps package.json, commits, tags vX.Y.Z
+#   cd ts && npm version patch --no-git-tag-version
+#   git commit -am "ts vX.Y.Z" && git tag ts-vX.Y.Z
 #   git push --follow-tags
+#
+# Tags are prefixed per package (ts-v*, later cli-v*), so each package
+# releases independently from one repo.
 #
 # No NPM_TOKEN anywhere. Publishing uses npm Trusted Publishing: the job asks
 # GitHub for a short-lived OIDC token, npm verifies it came from THIS repo and
@@ -15,7 +19,7 @@
 name: release
 on:
   push:
-    tags: ["v*"]
+    tags: ["ts-v*"]
 
 permissions:
   contents: read
@@ -55,7 +59,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract this version's changelog section
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${GITHUB_REF_NAME#ts-v}"
           awk -v ver="$VERSION" '
             $0 ~ "^## " ver "$" { on=1; next }
             /^## / && on { exit }

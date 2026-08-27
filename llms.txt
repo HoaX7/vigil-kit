@@ -1,0 +1,76 @@
+# Vigil
+
+> Vigil (https://tryvigil.dev) is uptime monitoring with hosted status pages. It watches websites, APIs, SSL certificates, DNS records, TCP/UDP ports, cron jobs and Discord bots, opens incidents when they fail, and alerts over email, Discord, Slack, Telegram and webhooks. This repository holds the official SDKs, CLI and agent skills.
+
+## Repository layout
+
+- [TypeScript SDK](./ts/README.md): `@hoax7/vigil-sdk` on npm. Reports every shard of a Discord bot. discord.js supported out of the box, any other library via a small adapter.
+- [Agent skills](./skills/README.md): install with `npx skills add HoaX7/vigil-sdk` to let Claude Code, Cursor and other agents set up Vigil integrations.
+- [Vigil CLI](./cli/README.md): create and manage monitors from the terminal. Install with `curl -fsSL https://cli.tryvigil.dev | bash`.
+- Python SDK: planned, not yet available. Until then Python bots use the REST protocol below.
+
+## The CLI in one minute
+
+```bash
+curl -fsSL https://cli.tryvigil.dev | bash   # needs Node.js 18+
+vigil login          # prints a code; approve it at tryvigil.dev/device
+vigil projects list --json
+vigil monitors create --project production --name "My site" --target https://example.com --json
+```
+
+`vigil login` uses a device flow: the terminal shows a one time code and a URL, the user approves it in the browser, the CLI stores the session in `~/.vigil/config.json`. Agents pass `--json` for stable output on stdout (logs go to stderr) and `--spec -` to POST a full JSON monitor definition. The CLI covers the whole dashboard (overview, plan and usage, incidents, status pages, maintenance, bots, subscribers, delivery logs, domains, email senders, team, billing) plus `vigil api <router.procedure>` for anything else; plan limits are enforced by the server on every call. `vigil --help` lists every command; the `uptime-monitoring` skill in this repo walks through the whole setup.
+
+## Monitor a Discord bot (TypeScript)
+
+```bash
+npm install @hoax7/vigil-sdk
+```
+
+```ts
+import { Client } from "discord.js";
+import { watch } from "@hoax7/vigil-sdk";
+
+const client = new Client({ shards: "auto", intents: [] });
+watch(client, {
+  token: process.env.VIGIL_TOKEN!,
+  projectId: process.env.VIGIL_PROJECT_ID!,
+});
+```
+
+Environment variables (exact names): `VIGIL_TOKEN`, `VIGIL_PROJECT_ID`, optional `VIGIL_URL` (defaults to `https://api.tryvigil.dev`). Both values come from the Vigil dashboard when a bot is added at https://tryvigil.dev/dashboard/new?kind=discord. Shards register themselves on the first connect, one monitor each; nothing is created by hand. There is no interval option: the server sets the cadence from the plan and restates it on every response. `watch` never throws into the host bot.
+
+## Monitor a Discord bot (REST, any language)
+
+The SDK speaks a two-call protocol anyone can implement. Both calls authenticate with `Authorization: Bearer <VIGIL_TOKEN>` and `Content-Type: application/json` against `https://api.tryvigil.dev`.
+
+Register once, when the bot starts:
+
+```
+POST /v1/handshake
+{"project_id":"<VIGIL_PROJECT_ID>","bot":{"shard_count":1}}
+```
+
+Then report every shard on a timer (the response's `interval_s` says how often):
+
+```
+POST /v1/ingest
+{"shards":[{"id":0,"status":"ready","latency_ms":42,"guilds":150}]}
+```
+
+`status` is one of `ready`, `resuming`, `idle`, `disconnected`. Silence past the deadline marks a shard down, so a crashed process reports itself by saying nothing.
+
+## Monitor a cron job
+
+Create a Cron monitor in the dashboard to get a ping URL, then call it when the job finishes:
+
+```
+0 3 * * *  /usr/local/bin/backup.sh && curl -fsS -m 10 --retry 3 https://api.tryvigil.dev/ping/<token>
+```
+
+The URL accepts more shapes: `/ping/<token>/start` marks a run as started (enables duration tracking and hang detection), `/ping/<token>/<exit-code>` passes `$?` straight through (0 is success, anything else records a failure), `/ping/<token>/fail` with a request body records the failure with that reason. `Authorization: Bearer <token>` against `/ping`, `/ping/start` etc. works when the token should stay out of URLs and logs. Always use curl's `-m 10 --retry 3` so a monitoring outage can never hang the job being monitored.
+
+## Optional
+
+- [SDK adapter contract](./ts/README.md): supporting Discord libraries other than discord.js with `defineAdapter`.
+- [Vigil](https://tryvigil.dev): product, pricing, dashboard.
+- [Docs](https://tryvigil.dev/docs): product documentation.

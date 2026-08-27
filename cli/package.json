@@ -1,0 +1,33 @@
+{
+  "name": "@hoax7/vigil-cli",
+  "version": "0.1.0",
+  "description": "Vigil uptime monitoring from the terminal. Create monitors, manage projects and wire alerts without opening the dashboard.",
+  "type": "module",
+  "bin": {
+    "vigil": "dist/vigil.mjs"
+  },
+  "files": [
+    "dist/vigil.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "node --experimental-strip-types src/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HoaX7/vigil-sdk.git",
+    "directory": "cli"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.25.11",
+    "typescript": "^5.7.2"
+  }
+}
