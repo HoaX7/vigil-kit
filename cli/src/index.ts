@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { parseArgs, str, num, csv, bool, type Parsed } from "./args.js";
 import { apiUrl, clearConfig, saveConfig, DEFAULT_API_URL } from "./config.js";
 import { CliError, UsageError, pollDeviceToken, requestDeviceCode, setNetObserver, signOut, trpcMutation, trpcQuery } from "./http.js";
-import { log, printJson, renderKV, say, table } from "./output.js";
+import { log, pagerLine, printJson, renderKV, say, table } from "./output.js";
 import { readSpec } from "./spec.js";
 import { topHelp, topicHelp } from "./help.js";
 import { netHooks, trackStep } from "./ui.js";
@@ -118,10 +118,22 @@ async function monitors(p: Parsed): Promise<void> {
 
   if (sub === "list") {
     const projectRef = str(p.flags, "project");
-    const input = projectRef ? { project_id: await resolveProject(projectRef) } : undefined;
-    const rows = ((await trpcQuery("monitors.list", input)) ?? []) as Record<string, unknown>[];
-    if (json) printJson(rows);
-    else table(rows, ["id", "name", "kind", "target", "status"]);
+    const input: Record<string, unknown> = {
+      limit: num(p.flags, "limit") ?? 25,
+      offset: num(p.flags, "offset") ?? 0,
+    };
+    if (projectRef) input["project_id"] = await resolveProject(projectRef);
+    const search = str(p.flags, "search");
+    if (search) input["search"] = search;
+    const res = (await trpcQuery("monitors.page", input)) as { items?: Record<string, unknown>[]; total?: number } | null;
+    if (json) {
+      printJson(res);
+      return;
+    }
+    const rows = res?.items ?? [];
+    table(rows, ["id", "name", "kind", "target", "status"]);
+    const pager = pagerLine(input["offset"] as number, rows.length, res?.total ?? rows.length);
+    if (pager) say(pager);
     return;
   }
 
@@ -221,12 +233,25 @@ async function channels(p: Parsed): Promise<void> {
 }
 
 function update(): Promise<void> {
-  log(`Updating via ${INSTALL_URL}`);
   return new Promise((resolve, reject) => {
-    const child = spawn("sh", ["-c", `curl -fsSL ${INSTALL_URL} | sh`], { stdio: "inherit" });
+    const child = spawn("sh", ["-c", `curl -fsSL ${INSTALL_URL} | sh`], {
+      stdio: "inherit",
+      env: { ...process.env, VIGIL_UPDATE: "1" },
+    });
     child.on("exit", (code) => (code === 0 ? resolve() : reject(new CliError("update failed"))));
     child.on("error", () => reject(new CliError(`update failed. Run: curl -fsSL ${INSTALL_URL} | sh`)));
   });
+}
+
+async function promptYes(question: string): Promise<boolean> {
+  const rl = await import("node:readline/promises");
+  const iface = rl.createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const answer = (await iface.question(question)).trim().toLowerCase();
+    return answer === "" || answer === "y" || answer === "yes";
+  } finally {
+    iface.close();
+  }
 }
 
 async function main(): Promise<void> {
@@ -243,6 +268,25 @@ async function main(): Promise<void> {
     say(topicHelp(cmd) ?? topHelp(VERSION, DEFAULT_API_URL));
     return;
   }
+  try {
+    await dispatch(cmd, p);
+  } catch (err) {
+    // An expired session on an interactive terminal offers the login right
+    // here instead of failing with instructions; then the command reruns.
+    const expired = err instanceof CliError && err.code === "UNAUTHORIZED" && cmd !== "login" && cmd !== "logout";
+    if (expired && process.stdin.isTTY && process.stderr.isTTY && !process.env["VIGIL_TOKEN"]) {
+      log(err instanceof CliError ? err.message.replace(/ Run: vigil login$/, "") : "Your session has expired.");
+      if (await promptYes("Log in now? [Y/n] ")) {
+        await login({ positional: ["login"], flags: {} });
+        await dispatch(cmd, p);
+        return;
+      }
+    }
+    throw err;
+  }
+}
+
+async function dispatch(cmd: string, p: Parsed): Promise<void> {
   switch (cmd) {
     case "login":
       return login(p);

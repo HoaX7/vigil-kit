@@ -55,7 +55,7 @@ vigil projects create <name> [--slug <slug>] [--json]
 
 Deleting a project is a dashboard action: ${DASH.monitors}`,
 
-  monitors: `vigil monitors list [--project <id|slug>] [--json]
+  monitors: `vigil monitors list [--project <id|slug>] [--limit <n>] [--offset <n>] [--search <text>] [--json]
 vigil monitors get <id> [--json]
 vigil monitors create --project <id|slug> --name <name> [flags] | --spec <file|->
 vigil monitors update <id> --spec <file|->
@@ -108,11 +108,11 @@ vigil bots shards <id> [--json]
 
 Read only. Creating a bot and its token live in the dashboard.`,
 
-  subscribers: `vigil subscribers [--page-id <id>] [--status <s>] [--limit <n>] [--json]
+  subscribers: `vigil subscribers [--page-id <id>] [--status <s>] [--limit <n>] [--offset <n>] [--json]
 
 Read only. Status page subscribers across the team.`,
 
-  logs: `vigil logs [--status sent|failed|queued] [--audience alert|subscriber] [--limit <n>] [--json]
+  logs: `vigil logs [--status sent|failed|queued] [--audience alert|subscriber] [--limit <n>] [--offset <n>] [--json]
 vigil logs detail <alert|subscriber> <id> [--json]
 
 The delivery log: where every alert and subscriber notice went.`,

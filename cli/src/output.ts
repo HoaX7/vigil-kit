@@ -66,6 +66,15 @@ export function renderKV(value: unknown): void {
   }
 }
 
+/** "Showing 1 to 25 of 240. Next page: --offset 25" under a paged table. */
+export function pagerLine(offset: number, shown: number, total: number): string | null {
+  if (total <= shown && offset === 0) return null;
+  const from = total === 0 ? 0 : offset + 1;
+  const to = offset + shown;
+  const next = to < total ? ` Next page: --offset ${to}` : "";
+  return `Showing ${from} to ${to} of ${total}.${next}`;
+}
+
 export function table(rows: Record<string, unknown>[], columns: string[]): void {
   if (rows.length === 0) {
     say("(none)");

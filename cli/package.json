@@ -1,6 +1,6 @@
 {
   "name": "@hoax7/vigil-cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Vigil uptime monitoring from the terminal. Create monitors, manage projects and wire alerts without opening the dashboard.",
   "type": "module",
   "bin": {

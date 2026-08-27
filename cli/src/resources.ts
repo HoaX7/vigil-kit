@@ -1,6 +1,6 @@
 import { str, num, bool, type Parsed } from "./args.js";
 import { CliError, UsageError, trpcMutation, trpcQuery } from "./http.js";
-import { autoTable, printJson, renderKV, say, table } from "./output.js";
+import { autoTable, pagerLine, printJson, renderKV, say, table } from "./output.js";
 import { readSpec, specOf } from "./spec.js";
 import { progress, step, trackStep } from "./ui.js";
 import { DASH, dashboardOnly } from "./links.js";
@@ -423,8 +423,10 @@ export async function logs(p: Parsed): Promise<void> {
   if (audience) input["audience"] = audience;
   const res = (await trpcQuery("deliveryLog.list", input)) as { items?: Record<string, unknown>[]; total?: number } | null;
   out(p, res, () => {
-    autoTable(res?.items ?? [], ["id", "audience", "kind", "status", "subject", "created_at"]);
-    if (typeof res?.total === "number") say(`${res.total} total`);
+    const items = res?.items ?? [];
+    autoTable(items, ["id", "audience", "kind", "status", "subject", "created_at"]);
+    const pager = pagerLine((input["offset"] as number) ?? 0, items.length, res?.total ?? items.length);
+    if (pager) say(pager);
   });
 }
 
@@ -436,12 +438,16 @@ export async function subscribers(p: Parsed): Promise<void> {
   if (status) input["status"] = status;
   const limit = num(p.flags, "limit");
   if (limit !== undefined) input["limit"] = limit;
+  const offset = num(p.flags, "offset") ?? 0;
+  input["offset"] = offset;
   const res = (await trpcQuery("subscribers.page", Object.keys(input).length ? input : undefined)) as
     | { items?: Record<string, unknown>[]; total?: number }
     | null;
   out(p, res, () => {
-    autoTable(res?.items ?? [], ["id", "kind", "destination", "status", "created_at"]);
-    if (typeof res?.total === "number") say(`${res.total} total`);
+    const items = res?.items ?? [];
+    autoTable(items, ["id", "kind", "destination", "status", "created_at"]);
+    const pager = pagerLine(offset, items.length, res?.total ?? items.length);
+    if (pager) say(pager);
   });
 }
 

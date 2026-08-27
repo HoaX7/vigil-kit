@@ -39,7 +39,16 @@ head -n 1 "$TMP" | grep -q '^#!/usr/bin/env node' || {
 mv "$TMP" "$BIN_DIR/vigil"
 chmod +x "$BIN_DIR/vigil"
 
-echo "Installed vigil to $BIN_DIR/vigil ($("$BIN_DIR/vigil" version 2>/dev/null || echo unknown))"
+VERSION="$("$BIN_DIR/vigil" version 2>/dev/null || echo unknown)"
+
+# `vigil update` runs this same script with VIGIL_UPDATE set: the tool is
+# already installed and on PATH, so only the outcome is worth printing.
+if [ -n "$VIGIL_UPDATE" ]; then
+  echo "Updated vigil to $VERSION"
+  exit 0
+fi
+
+echo "Installed vigil to $BIN_DIR/vigil ($VERSION)"
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
