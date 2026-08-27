@@ -1,4 +1,22 @@
+import { hostname } from "node:os";
 import { apiUrl, token } from "./config.js";
+
+declare const __VIGIL_VERSION__: string;
+
+/**
+ * Identifies this device in the session the login mints, so the dashboard's
+ * Devices page can say "Vigil CLI on macOS (hostname)" instead of "Browser".
+ */
+function userAgent(): string {
+  const version = typeof __VIGIL_VERSION__ === "string" ? __VIGIL_VERSION__ : "dev";
+  let host = "";
+  try {
+    host = hostname();
+  } catch {
+    host = "";
+  }
+  return `vigil-cli/${version} (${process.platform}; ${process.arch}${host ? `; ${host}` : ""})`;
+}
 
 export class CliError extends Error {
   constructor(
@@ -37,7 +55,7 @@ function authHeaders(): Record<string, string> {
   if (t === "") {
     throw new CliError("Not logged in. Run: vigil login", "UNAUTHORIZED");
   }
-  return { Authorization: `Bearer ${t}`, "Content-Type": "application/json" };
+  return { Authorization: `Bearer ${t}`, "Content-Type": "application/json", "User-Agent": userAgent() };
 }
 
 interface TrpcEnvelope {
@@ -97,7 +115,7 @@ export function requestDeviceCode(api: string): Promise<DeviceCodeResponse> {
 async function requestDeviceCodeInner(api: string): Promise<DeviceCodeResponse> {
   const res = await fetch(`${api}/api/auth/device/code`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "User-Agent": userAgent() },
     body: JSON.stringify({ client_id: "vigil-cli" }),
     signal: AbortSignal.timeout(30_000),
   });
@@ -116,7 +134,7 @@ export type PollResult =
 export async function pollDeviceToken(api: string, deviceCode: string): Promise<PollResult> {
   const res = await fetch(`${api}/api/auth/device/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "User-Agent": userAgent() },
     body: JSON.stringify({
       grant_type: "urn:ietf:params:oauth:grant-type:device_code",
       device_code: deviceCode,
@@ -136,7 +154,7 @@ export async function signOut(): Promise<void> {
   if (t === "") return;
   await fetch(`${apiUrl()}/api/auth/sign-out`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json", "User-Agent": userAgent() },
     body: "{}",
     signal: AbortSignal.timeout(10_000),
   }).catch(() => {});
