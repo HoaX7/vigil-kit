@@ -6,11 +6,11 @@ import { log, pagerLine, printJson, renderKV, say, table } from "./output.js";
 import { readSpec } from "./spec.js";
 import { topHelp, topicHelp } from "./help.js";
 import { netHooks, trackStep } from "./ui.js";
+import { maybeNotifyUpdate, update } from "./update.js";
 import * as res from "./resources.js";
 
 declare const __VIGIL_VERSION__: string;
 const VERSION = typeof __VIGIL_VERSION__ === "string" ? __VIGIL_VERSION__ : "dev";
-const INSTALL_URL = "https://cli.tryvigil.dev";
 
 
 function openBrowser(url: string): void {
@@ -232,30 +232,6 @@ async function channels(p: Parsed): Promise<void> {
   return res.channelsExtra(p, sub);
 }
 
-function update(): Promise<void> {
-  return trackStep("Updating vigil…", () =>
-    new Promise((resolve, reject) => {
-      const child = spawn("sh", ["-c", `curl -fsSL ${INSTALL_URL} | sh`], {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, VIGIL_UPDATE: "1" },
-      });
-      let output = "";
-      child.stdout?.on("data", (d: Buffer) => (output += d.toString()));
-      child.stderr?.on("data", (d: Buffer) => (output += d.toString()));
-      child.on("exit", (code) => {
-        const text = output.trim();
-        if (code === 0) {
-          if (text) say(text);
-          resolve();
-        } else {
-          reject(new CliError(text || "update failed"));
-        }
-      });
-      child.on("error", () => reject(new CliError(`update failed. Run: curl -fsSL ${INSTALL_URL} | sh`)));
-    }),
-  );
-}
-
 async function promptYes(question: string): Promise<boolean> {
   const rl = await import("node:readline/promises");
   const iface = rl.createInterface({ input: process.stdin, output: process.stderr });
@@ -283,6 +259,7 @@ async function main(): Promise<void> {
   }
   try {
     await dispatch(cmd, p);
+    if (cmd !== "update" && cmd !== "version") await maybeNotifyUpdate(VERSION);
   } catch (err) {
     // An expired session on an interactive terminal offers the login right
     // here instead of failing with instructions; then the command reruns.
@@ -350,7 +327,7 @@ async function dispatch(cmd: string, p: Parsed): Promise<void> {
       say(VERSION);
       return;
     case "update":
-      return update();
+      return update(VERSION);
     default:
       throw new UsageError(`Unknown command "${cmd}". Run: vigil --help`);
   }
