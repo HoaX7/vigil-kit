@@ -109,7 +109,7 @@ export interface DeviceCodeResponse {
 }
 
 export function requestDeviceCode(api: string): Promise<DeviceCodeResponse> {
-  return observed("Contacting Vigil…", () => requestDeviceCodeInner(api));
+  return observed("Connecting to Vigil…", () => requestDeviceCodeInner(api));
 }
 
 async function requestDeviceCodeInner(api: string): Promise<DeviceCodeResponse> {

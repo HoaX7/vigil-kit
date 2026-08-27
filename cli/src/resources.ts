@@ -95,6 +95,16 @@ export async function incidents(p: Parsed): Promise<void> {
   throw new UsageError(`Unknown subcommand "incidents ${sub}". Run: vigil --help`);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolvePage(ref: string): Promise<string> {
+  if (UUID_RE.test(ref)) return ref;
+  const rows = ((await trpcQuery("statusPages.list")) ?? []) as { id: string; slug?: string; title?: string }[];
+  const hit = rows.find((r) => r.slug === ref || r.title === ref);
+  if (!hit) throw new CliError(`No status page "${ref}". Run: vigil status-pages list`);
+  return hit.id;
+}
+
 export async function statusPages(p: Parsed): Promise<void> {
   const sub = p.positional[1] ?? "list";
   const json = bool(p.flags, "json");
@@ -105,7 +115,8 @@ export async function statusPages(p: Parsed): Promise<void> {
     return;
   }
   if (sub === "get") {
-    const row = await trpcQuery("statusPages.get", { id: need(p, 2, "vigil status-pages get <id>") });
+    const id = await resolvePage(need(p, 2, "vigil status-pages get <id|slug>"));
+    const row = await trpcQuery("statusPages.get", { id });
     out(p, row, () => renderKV(row));
     return;
   }
@@ -128,10 +139,17 @@ export async function statusPages(p: Parsed): Promise<void> {
     return;
   }
   if (sub === "add-monitor") {
-    const pageId = need(p, 2, "vigil status-pages add-monitor <page-id> <monitor-id>");
-    const monitorId = need(p, 3, "vigil status-pages add-monitor <page-id> <monitor-id>");
-    const added = await trpcMutation("statusPages.addMonitor", { status_page_id: pageId, monitor_id: monitorId });
+    const pageId = await resolvePage(need(p, 2, "vigil status-pages add-monitor <page|slug> <monitor-id>"));
+    const monitorId = need(p, 3, "vigil status-pages add-monitor <page|slug> <monitor-id>");
+    const added = await trpcMutation("statusPages.addMonitor", { id: pageId, monitor_id: monitorId });
     out(p, added ?? { ok: true }, () => say("Monitor added to the page."));
+    return;
+  }
+  if (sub === "add-bot") {
+    const pageId = await resolvePage(need(p, 2, "vigil status-pages add-bot <page|slug> <bot-id>"));
+    const botId = need(p, 3, "vigil status-pages add-bot <page|slug> <bot-id>");
+    const added = await trpcMutation("statusPages.addBot", { id: pageId, bot_id: botId });
+    out(p, added ?? { ok: true }, () => say("Bot added to the page. Every shard shows under it."));
     return;
   }
   if (sub === "rm" || sub === "delete" || sub === "archive") {
@@ -321,10 +339,14 @@ export async function team(p: Parsed): Promise<void> {
     return;
   }
   if (sub === "invite") {
-    const emailAddr = need(p, 2, "vigil team invite <email> [--role member|admin]");
-    const role = str(p.flags, "role") ?? "member";
+    const emailAddr = need(p, 2, "vigil team invite <email> [--role member|admin|alert-only]");
+    const raw = (str(p.flags, "role") ?? "member").toLowerCase();
+    const role = raw === "alert-only" || raw === "alertonly" ? "notify" : raw;
+    if (role !== "member" && role !== "admin" && role !== "notify") {
+      throw new UsageError(`Unknown role "${raw}". Use member, admin or alert-only.`);
+    }
     const row = await trpcMutation("team.invite", { email: emailAddr, role });
-    out(p, row, () => say(`Invited ${emailAddr} as ${role}.`));
+    out(p, row, () => say(`Invited ${emailAddr} as ${raw === "notify" ? "alert-only" : raw}.`));
     return;
   }
   if (sub === "remove" || sub === "role") {
@@ -344,6 +366,21 @@ interface TeamRow {
 async function teamList(): Promise<{ teams: TeamRow[]; activeId: string | null }> {
   const res = (await trpcQuery("team.list")) as { teams?: TeamRow[]; activeId?: string | null } | null;
   return { teams: res?.teams ?? [], activeId: res?.activeId ?? null };
+}
+
+export async function usage(p: Parsed): Promise<void> {
+  const u = await trpcQuery("org.usage");
+  out(p, u, () => renderKV(u));
+}
+
+export async function upgrade(p: Parsed): Promise<void> {
+  const u = ((await trpcQuery("org.usage").catch(() => null)) ?? {}) as { plan?: string };
+  const data = { plan: u.plan ?? null, pricing_url: "https://tryvigil.dev/pricing", manage_url: DASH.billing };
+  out(p, data, () => {
+    if (u.plan) say(`Current plan: ${u.plan}`);
+    say("Compare plans and upgrade: https://tryvigil.dev/pricing");
+    say(`Manage the subscription: ${DASH.billing}`);
+  });
 }
 
 export async function teams(p: Parsed): Promise<void> {

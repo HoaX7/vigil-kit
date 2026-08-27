@@ -329,6 +329,10 @@ async function dispatch(cmd: string, p: Parsed): Promise<void> {
       return res.teams(p);
     case "billing":
       return res.billing(p);
+    case "usage":
+      return res.usage(p);
+    case "upgrade":
+      return res.upgrade(p);
     case "version":
       say(VERSION);
       return;

@@ -6,7 +6,7 @@ export function topHelp(version: string, defaultApi: string): string {
 Usage: vigil <command> [subcommand] [flags]
 
 Account     login · logout · whoami · teams
-Insight     overview · plan · billing
+Insight     overview · plan · usage · billing · upgrade
 Monitoring  projects · monitors · incidents
 Alerting    channels · logs
 Public      status-pages · maintenance · domains · subscribers · email
@@ -83,11 +83,14 @@ Slack OAuth, SMS and WhatsApp setup, and deleting a channel are dashboard
 actions: ${DASH.notifications}`,
 
   "status-pages": `vigil status-pages list [--json]
-vigil status-pages get <id> [--json]
+vigil status-pages get <id|slug> [--json]
 vigil status-pages create --project <id> --slug <slug> --title <title>
-vigil status-pages add-monitor <page-id> <monitor-id>
+vigil status-pages add-monitor <page id|slug> <monitor-id>
+vigil status-pages add-bot <page id|slug> <bot-id>
 
-Archiving or deleting a page is a dashboard action: ${DASH.statusPages}`,
+The page argument accepts the page's id, slug or title; monitor and bot ids
+come from vigil monitors list and vigil bots list. Archiving or deleting a
+page is a dashboard action: ${DASH.statusPages}`,
 
   maintenance: `vigil maintenance list [--json]
 vigil maintenance get <id> [--json]
@@ -124,9 +127,18 @@ sent from. With none configured, mail goes out from the default Vigil
 sender. Set up your own domain in the dashboard: ${DASH.email}`,
 
   team: `vigil team members [--json]
-vigil team invite <email> [--role member|admin]
+vigil team invite <email> [--role member|admin|alert-only]
 
-Role changes and removals are dashboard actions: ${DASH.team}`,
+alert-only seats receive alerts but cannot open the dashboard. Role changes
+and removals are dashboard actions: ${DASH.team}`,
+
+  usage: `vigil usage [--json]
+
+Current plan limits and what the team uses of them.`,
+
+  upgrade: `vigil upgrade
+
+The current plan and where to compare and change plans.`,
 
   billing: `vigil billing [--json]
 
