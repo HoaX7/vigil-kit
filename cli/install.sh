@@ -59,6 +59,24 @@ case ":$PATH:" in
     ;;
 esac
 
+# Inside a project, also install the agent skills so Claude Code, Cursor and
+# friends know how to drive the CLI. Best effort: a failure never fails the
+# CLI install. Set VIGIL_NO_SKILLS=1 to skip.
+if [ -z "$VIGIL_NO_SKILLS" ] && command -v npx >/dev/null 2>&1 && { [ -f "package.json" ] || [ -d ".git" ]; }; then
+  echo ""
+  echo "Adding the Vigil agent skills to this project…"
+  if npx -y skills add HoaX7/vigil-kit < /dev/null; then
+    echo "Agent skills installed. Coding agents in this project can now set up Vigil."
+  else
+    echo "Could not add the skills automatically. Run it yourself later:"
+    echo "  npx skills add HoaX7/vigil-kit"
+  fi
+else
+  echo ""
+  echo "Working with an AI coding agent? Add the Vigil skills in your project:"
+  echo "  npx skills add HoaX7/vigil-kit"
+fi
+
 echo ""
 echo "Get started:"
 echo "  vigil login"
