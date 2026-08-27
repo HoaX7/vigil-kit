@@ -28,7 +28,7 @@ again when a command says so.
 ## Commands
 
 ```
-vigil login | logout | whoami
+vigil login | logout | whoami | teams
 vigil overview | plan | billing
 vigil projects list | create <name>
 vigil monitors list | get | create | update | rm | pause | resume | check
@@ -40,12 +40,14 @@ vigil bots list | get | shards
 vigil domains list | add | assign | verify | rm
 vigil subscribers | logs | email
 vigil team members | invite <email>
-vigil api <router.procedure> [--input <json|->]
 vigil version | update
 ```
 
-`vigil --help` documents every flag. Plan limits are enforced by the server
-on every call; `vigil plan` shows what the current plan allows.
+`vigil --help` shows the command groups; `vigil <command> --help` documents
+each command. Preset commands only, no raw API access: destructive and admin
+actions are dashboard only and the CLI prints the link. Plan limits are
+enforced by the server on every call; `vigil plan` shows what the plan
+allows.
 
 ## For scripts and agents
 

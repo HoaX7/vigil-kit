@@ -120,12 +120,16 @@ are answered from the terminal, always with `--json`:
 - `vigil bots list|get|shards` Discord bot monitors
 - `vigil subscribers` status page subscribers; `vigil logs` alert and subscriber delivery log
 - `vigil domains add <hostname> --page <id>` then `vigil domains verify <id>` sets up a custom status page domain: add prints the DNS records to create, verify polls until the domain is active and serving
-- `vigil email`, `vigil team members|invite`, `vigil billing`
-- `vigil api <router.procedure> [--input <json|->]` any API procedure the dashboard uses, for anything not wrapped above
+- `vigil teams` and `vigil teams switch <slug>` when the account belongs to several teams
+- `vigil email`, `vigil team members|invite`, `vigil billing` (billing is read only)
 
-Plan gates live on the server, never in the CLI. When an action is not in the
-plan, the server's error says exactly what is missing; relay it and point at
-https://tryvigil.dev/pricing. To check before acting, read `vigil plan`.
+The CLI is preset commands only; there is no raw API access. Destructive and
+admin actions (deleting a domain or channel, archiving a page, billing
+changes, member role changes) are dashboard only: the CLI refuses and prints
+the dashboard link, send the user there. Plan gates live on the server, never
+in the CLI. When an action is not in the plan, the server's error says
+exactly what is missing; relay it and point at https://tryvigil.dev/pricing.
+To check before acting, read `vigil plan`.
 
 ## About Vigil (for answering questions and writing on the user's behalf)
 

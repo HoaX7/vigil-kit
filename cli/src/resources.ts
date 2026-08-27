@@ -3,36 +3,12 @@ import { CliError, trpcMutation, trpcQuery } from "./http.js";
 import { printJson, say, table } from "./output.js";
 import { readSpec, specOf } from "./spec.js";
 import { progress, step, trackStep } from "./ui.js";
+import { DASH, dashboardOnly } from "./links.js";
 
 function need(p: Parsed, index: number, usage: string): string {
   const v = p.positional[index];
   if (!v) throw new CliError(`Usage: ${usage}`);
   return v;
-}
-
-export async function apiCall(p: Parsed): Promise<void> {
-  const path = need(p, 1, "vigil api <router.procedure> [--input <json|->] [--mutation]");
-  if (!/^[a-zA-Z]+\.[a-zA-Z]+$/.test(path)) {
-    throw new CliError(`"${path}" is not a procedure path. Expected router.procedure, e.g. monitors.list`);
-  }
-  const rawInput = str(p.flags, "input");
-  const input = rawInput === undefined ? undefined : rawInput === "-" ? readSpec("-") : (JSON.parse(rawInput) as unknown);
-
-  if (bool(p.flags, "mutation")) {
-    printJson(await trpcMutation(path, input));
-    return;
-  }
-  try {
-    printJson(await trpcQuery(path, input));
-  } catch (err) {
-    // A mutation called as a query answers METHOD_NOT_SUPPORTED; retry as the
-    // caller obviously intended.
-    if (err instanceof CliError && err.code === "METHOD_NOT_SUPPORTED") {
-      printJson(await trpcMutation(path, input));
-      return;
-    }
-    throw err;
-  }
 }
 
 export async function plan(p: Parsed): Promise<void> {
@@ -131,7 +107,10 @@ export async function statusPages(p: Parsed): Promise<void> {
     printJson(await trpcMutation("statusPages.addMonitor", { status_page_id: pageId, monitor_id: monitorId }));
     return;
   }
-  throw new CliError(`Unknown subcommand "status-pages ${sub}". Run: vigil --help`);
+  if (sub === "rm" || sub === "delete" || sub === "archive") {
+    dashboardOnly("Archiving or deleting a status page", DASH.statusPages);
+  }
+  throw new CliError(`Unknown subcommand "status-pages ${sub}". Run: vigil status-pages --help`);
 }
 
 export async function maintenance(p: Parsed): Promise<void> {
@@ -272,16 +251,10 @@ export async function domains(p: Parsed): Promise<void> {
         : `Still ${final.status} after ${timeoutS}s. DNS may not have propagated yet; run the command again in a few minutes.`,
     );
   }
-  if (sub === "rm") {
-    const id = need(p, 2, "vigil domains rm <id> --yes");
-    if (!bool(p.flags, "yes")) {
-      throw new CliError("Removing a domain stops it serving the status page immediately. Re-run with --yes to confirm.");
-    }
-    await trpcMutation("customDomains.remove", { id });
-    say("Domain removed.");
-    return;
+  if (sub === "rm" || sub === "remove") {
+    dashboardOnly("Removing a custom domain", DASH.domains);
   }
-  throw new CliError(`Unknown subcommand "domains ${sub}". Run: vigil --help`);
+  throw new CliError(`Unknown subcommand "domains ${sub}". Run: vigil domains --help`);
 }
 
 export async function email(p: Parsed): Promise<void> {
@@ -300,7 +273,49 @@ export async function team(p: Parsed): Promise<void> {
     printJson(await trpcMutation("team.invite", { email: emailAddr, role }));
     return;
   }
-  throw new CliError(`Unknown subcommand "team ${sub}". Run: vigil --help`);
+  if (sub === "remove" || sub === "role") {
+    dashboardOnly("Changing or removing a member", DASH.team);
+  }
+  throw new CliError(`Unknown subcommand "team ${sub}". Run: vigil team --help`);
+}
+
+interface TeamRow {
+  id: string;
+  slug?: string;
+  name?: string;
+  role?: string;
+  suspended?: boolean;
+}
+
+async function teamList(): Promise<{ teams: TeamRow[]; activeId: string | null }> {
+  const res = (await trpcQuery("team.list")) as { teams?: TeamRow[]; activeId?: string | null } | null;
+  return { teams: res?.teams ?? [], activeId: res?.activeId ?? null };
+}
+
+export async function teams(p: Parsed): Promise<void> {
+  const sub = p.positional[1] ?? "list";
+  if (sub === "list") {
+    const { teams: rows, activeId } = await teamList();
+    if (bool(p.flags, "json")) {
+      printJson(rows.map((t) => ({ ...t, active: t.id === activeId })));
+      return;
+    }
+    table(
+      rows.map((t) => ({ ...t, active: t.id === activeId ? "yes" : "" })),
+      ["id", "slug", "name", "role", "active"],
+    );
+    return;
+  }
+  if (sub === "switch") {
+    const ref = need(p, 2, "vigil teams switch <team-id|slug>");
+    const { teams: rows } = await teamList();
+    const hit = rows.find((r) => r.id === ref || r.slug === ref || r.name === ref);
+    if (!hit) throw new CliError(`No team "${ref}". Run: vigil teams`);
+    await trpcMutation("team.setActive", { teamId: hit.id });
+    say(`Active team is now ${hit.name ?? hit.slug ?? hit.id}.`);
+    return;
+  }
+  throw new CliError(`Unknown subcommand "teams ${sub}". Run: vigil teams --help`);
 }
 
 export async function billing(p: Parsed): Promise<void> {
@@ -308,7 +323,7 @@ export async function billing(p: Parsed): Promise<void> {
     trpcQuery("billing.subscription"),
     trpcQuery("billing.capabilities").catch(() => null),
   ]);
-  printJson({ subscription, capabilities });
+  printJson({ subscription, capabilities, manage_url: DASH.billing });
 }
 
 export async function logs(p: Parsed): Promise<void> {
@@ -355,5 +370,8 @@ export async function channelsExtra(p: Parsed, sub: string): Promise<void> {
     printJson(await trpcMutation("channels.testSend", { id, event: str(p.flags, "event") ?? "monitor_down" }));
     return;
   }
-  throw new CliError(`Unknown subcommand "channels ${sub}". Run: vigil --help`);
+  if (sub === "rm" || sub === "delete") {
+    dashboardOnly("Deleting a channel", DASH.notifications);
+  }
+  throw new CliError(`Unknown subcommand "channels ${sub}". Run: vigil channels --help`);
 }

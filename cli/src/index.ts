@@ -4,6 +4,7 @@ import { apiUrl, clearConfig, saveConfig, DEFAULT_API_URL } from "./config.js";
 import { CliError, pollDeviceToken, requestDeviceCode, setNetObserver, signOut, trpcMutation, trpcQuery } from "./http.js";
 import { log, printJson, say, table } from "./output.js";
 import { readSpec } from "./spec.js";
+import { topHelp, topicHelp } from "./help.js";
 import { netHooks, trackStep } from "./ui.js";
 import * as res from "./resources.js";
 
@@ -11,70 +12,6 @@ declare const __VIGIL_VERSION__: string;
 const VERSION = typeof __VIGIL_VERSION__ === "string" ? __VIGIL_VERSION__ : "dev";
 const INSTALL_URL = "https://cli.tryvigil.dev";
 
-const HELP = `vigil ${VERSION} — Vigil uptime monitoring from the terminal
-
-Usage: vigil <command> [subcommand] [flags]
-
-Commands:
-  login [--api <url>]          Sign in through the browser (device flow)
-  logout                       Sign out and remove the stored token
-  whoami [--json]              Show the signed in user and team
-  overview                     Team, usage, monitor status counts, open incidents
-  plan                         Subscription, plan limits and usage
-  projects list [--json]       List projects
-  projects create <name> [--slug <slug>] [--json]
-  monitors list [--project <id|slug>] [--json]
-  monitors get <id> [--json]
-  monitors create [flags] | --spec <file|->   Create a monitor
-  monitors update <id> --spec <file|->        Change a monitor
-  monitors rm <id> --yes       Delete a monitor
-  monitors pause <id>          Pause checks
-  monitors resume <id>         Resume checks
-  monitors check <id>          Run a check now
-  incidents list [--status open|resolved] | get <id> | ack <id> | resolve <id> | update <id> --message "..."
-  channels list | catalog | create --spec <file|-> | test <id> [--event <event>]
-  status-pages list | get <id> | create --project <id> --slug <s> --title <t> | add-monitor <page> <monitor>
-  maintenance list | get <id> | create --spec <file|-> | cancel <id> | complete <id>
-  bots list | get <id> | shards <id>
-  subscribers [--page-id <id>] [--status <s>]
-  logs [--status sent|failed|queued] [--audience alert|subscriber] | logs detail <audience> <id>
-  domains list | add <hostname> [--page <id>] | assign <id> <page-id> | verify <id> | rm <id> --yes
-  email                        List email senders
-  team members | invite <email> [--role member|admin]
-  billing                      Subscription and payment capabilities
-  api <router.procedure> [--input <json|->] [--mutation]   Call any API procedure
-  version                      Print the CLI version
-  update                       Update the CLI to the latest version
-
-Plan limits are enforced by the server on every call. When something is not
-included in the plan the error says so; run vigil plan to see limits first.
-
-Monitor create flags:
-  --project <id|slug>   Project the monitor belongs to (required)
-  --name <name>         Display name (required)
-  --kind <kind>         http | ssl | dns | tcp | udp | ping | push (default http)
-  --target <target>     URL, hostname or host:port (required for most kinds)
-  --method <verb>       HTTP method (http)
-  --expect-status <csv> Accepted HTTP status codes, e.g. 200,204 (http)
-  --expect-body <text>  Substring the response body must contain (http)
-  --dns-type <type>     DNS record type, e.g. A, CNAME (dns)
-  --dns-expect <csv>    Expected DNS values (dns)
-  --interval <seconds>  Check interval
-  --timeout <ms>        Check timeout
-  --regions <csv>       Probe regions
-  --schedule <cron>     Cron expression (push/heartbeat monitors)
-  --tz <zone>           Timezone for --schedule
-  --grace <seconds>     How late a scheduled ping may be
-  --spec <file|->       Full JSON body instead of flags (- reads stdin)
-
-Global flags:
-  --json                Machine readable output on stdout, logs on stderr
-
-Environment:
-  VIGIL_TOKEN           Token to use instead of the stored login
-  VIGIL_API_URL         API base (default ${DEFAULT_API_URL})
-
-Docs: https://tryvigil.dev/llms.txt`;
 
 function openBrowser(url: string): void {
   const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
@@ -293,8 +230,13 @@ async function main(): Promise<void> {
   const p = parseArgs(process.argv.slice(2));
   const cmd = p.positional[0];
 
-  if (!cmd || cmd === "help" || p.flags["help"] === true) {
-    say(HELP);
+  if (!cmd || cmd === "help") {
+    const topic = cmd === "help" ? p.positional[1] : undefined;
+    say((topic && topicHelp(topic)) || topHelp(VERSION, DEFAULT_API_URL));
+    return;
+  }
+  if (p.flags["help"] === true) {
+    say(topicHelp(cmd) ?? topHelp(VERSION, DEFAULT_API_URL));
     return;
   }
   switch (cmd) {
@@ -335,10 +277,10 @@ async function main(): Promise<void> {
       return res.email(p);
     case "team":
       return res.team(p);
+    case "teams":
+      return res.teams(p);
     case "billing":
       return res.billing(p);
-    case "api":
-      return res.apiCall(p);
     case "version":
       say(VERSION);
       return;
