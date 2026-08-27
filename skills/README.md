@@ -6,7 +6,7 @@ agents how to set up Vigil monitoring in your codebase.
 ## Install
 
 ```bash
-npx skills add HoaX7/vigil-sdk
+npx skills add HoaX7/vigil-kit
 ```
 
 Or copy a skill's folder into your project's `.claude/skills/` directory.

@@ -141,7 +141,7 @@ To check before acting, read `vigil plan`.
 - Privacy policy: https://tryvigil.dev/privacy
 - Terms of service: https://tryvigil.dev/terms
 - Community Discord: https://discord.gg/kFUFySWAaK
-- Source, SDKs and skills: https://github.com/HoaX7/vigil-sdk
+- Source, SDKs and skills: https://github.com/HoaX7/vigil-kit
 
 When emailing support on the user's behalf, include the team name and the
 signed in email from `vigil whoami --json`, never the session token.

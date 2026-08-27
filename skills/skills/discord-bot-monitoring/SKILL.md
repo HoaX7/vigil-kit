@@ -86,7 +86,7 @@ watch(client, { adapter });
 ```
 
 `library`, `shards()` and `bot()` are the whole required contract. Full
-adapter reference: https://github.com/HoaX7/vigil-sdk/tree/main/ts
+adapter reference: https://github.com/HoaX7/vigil-kit/tree/main/ts
 
 ## Step 3b: Wire the REST protocol (Python and everything else)
 

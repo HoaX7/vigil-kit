@@ -5,7 +5,7 @@
 ## Repository layout
 
 - [TypeScript SDK](./ts/README.md): `@hoax7/vigil-sdk` on npm. Reports every shard of a Discord bot. discord.js supported out of the box, any other library via a small adapter.
-- [Agent skills](./skills/README.md): install with `npx skills add HoaX7/vigil-sdk` to let Claude Code, Cursor and other agents set up Vigil integrations.
+- [Agent skills](./skills/README.md): install with `npx skills add HoaX7/vigil-kit` to let Claude Code, Cursor and other agents set up Vigil integrations.
 - [Vigil CLI](./cli/README.md): create and manage monitors from the terminal. Install with `curl -fsSL https://cli.tryvigil.dev | bash`.
 - Python SDK: planned, not yet available. Until then Python bots use the REST protocol below.
 

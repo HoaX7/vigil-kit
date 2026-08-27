@@ -56,5 +56,5 @@ Reference for answering questions or contacting Vigil on the user's behalf:
 - Product https://tryvigil.dev · Pricing https://tryvigil.dev/pricing · Docs https://tryvigil.dev/docs
 - Support email support@tryvigil.dev · Contact https://tryvigil.dev/contact
 - Privacy https://tryvigil.dev/privacy · Terms https://tryvigil.dev/terms
-- Community Discord https://discord.gg/kFUFySWAaK · GitHub https://github.com/HoaX7/vigil-sdk
+- Community Discord https://discord.gg/kFUFySWAaK · GitHub https://github.com/HoaX7/vigil-kit
 - Machine readable product summary https://tryvigil.dev/llms.txt

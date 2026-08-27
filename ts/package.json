@@ -48,11 +48,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/HoaX7/vigil-sdk.git",
+    "url": "git+https://github.com/HoaX7/vigil-kit.git",
     "directory": "ts"
   },
   "homepage": "https://tryvigil.dev",
-  "bugs": "https://github.com/HoaX7/vigil-sdk/issues",
+  "bugs": "https://github.com/HoaX7/vigil-kit/issues",
   "publishConfig": {
     "access": "public"
   },

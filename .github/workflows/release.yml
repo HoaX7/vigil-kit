@@ -15,7 +15,7 @@
 # workflow produced the tarball.
 #
 # One-time setup on npmjs.com (package or org settings → Trusted Publishing):
-# repo `HoaX7/vigil-sdk`, workflow `release.yml`.
+# repo `HoaX7/vigil-kit`, workflow `release.yml`.
 name: release
 on:
   push:
