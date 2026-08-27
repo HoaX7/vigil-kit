@@ -9,6 +9,9 @@ export class CliError extends Error {
   }
 }
 
+/** A misused command: the error is followed by that command's help page. */
+export class UsageError extends CliError {}
+
 export interface NetObserver {
   begin(label: string): void;
   end(): void;

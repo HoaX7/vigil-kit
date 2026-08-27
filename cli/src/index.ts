@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { parseArgs, str, num, csv, bool, type Parsed } from "./args.js";
 import { apiUrl, clearConfig, saveConfig, DEFAULT_API_URL } from "./config.js";
-import { CliError, pollDeviceToken, requestDeviceCode, setNetObserver, signOut, trpcMutation, trpcQuery } from "./http.js";
-import { log, printJson, say, table } from "./output.js";
+import { CliError, UsageError, pollDeviceToken, requestDeviceCode, setNetObserver, signOut, trpcMutation, trpcQuery } from "./http.js";
+import { log, printJson, renderKV, say, table } from "./output.js";
 import { readSpec } from "./spec.js";
 import { topHelp, topicHelp } from "./help.js";
 import { netHooks, trackStep } from "./ui.js";
@@ -97,7 +97,7 @@ async function projects(p: Parsed): Promise<void> {
   }
   if (sub === "create") {
     const name = p.positional[2] ?? str(p.flags, "name");
-    if (!name) throw new CliError("Usage: vigil projects create <name> [--slug <slug>]");
+    if (!name) throw new UsageError("Usage: vigil projects create <name> [--slug <slug>]");
     const slug =
       str(p.flags, "slug") ??
       name
@@ -109,7 +109,7 @@ async function projects(p: Parsed): Promise<void> {
     else say(`Created project "${name}" (${(row as { id?: string })?.id ?? ""})`);
     return;
   }
-  throw new CliError(`Unknown subcommand "projects ${sub}". Run: vigil --help`);
+  throw new UsageError(`Unknown subcommand "projects ${sub}". Run: vigil --help`);
 }
 
 async function monitors(p: Parsed): Promise<void> {
@@ -127,8 +127,10 @@ async function monitors(p: Parsed): Promise<void> {
 
   const id = p.positional[2];
   if (sub === "get") {
-    if (!id) throw new CliError("Usage: vigil monitors get <id>");
-    printJson(await trpcQuery("monitors.get", { id }));
+    if (!id) throw new UsageError("Usage: vigil monitors get <id>");
+    const row = await trpcQuery("monitors.get", { id });
+    if (json) printJson(row);
+    else renderKV(row);
     return;
   }
   if (sub === "create") {
@@ -144,7 +146,7 @@ async function monitors(p: Parsed): Promise<void> {
       const name = str(p.flags, "name");
       const target = str(p.flags, "target");
       if (!projectRef || !name) {
-        throw new CliError("Required: --project and --name (or use --spec). Run: vigil --help");
+        throw new UsageError("Required: --project and --name (or use --spec).");
       }
       input = {
         project_id: await resolveProject(projectRef),
@@ -171,15 +173,17 @@ async function monitors(p: Parsed): Promise<void> {
     return;
   }
   if (sub === "update") {
-    if (!id) throw new CliError("Usage: vigil monitors update <id> --spec <file|->");
+    if (!id) throw new UsageError("Usage: vigil monitors update <id> --spec <file|->");
     const specPath = str(p.flags, "spec");
-    if (!specPath) throw new CliError("Usage: vigil monitors update <id> --spec <file|->");
+    if (!specPath) throw new UsageError("Usage: vigil monitors update <id> --spec <file|->");
     const body = readSpec(specPath) as Record<string, unknown>;
-    printJson(await trpcMutation("monitors.update", { ...body, id }));
+    const row = await trpcMutation("monitors.update", { ...body, id });
+    if (json) printJson(row);
+    else say("Monitor updated.");
     return;
   }
   if (sub === "rm") {
-    if (!id) throw new CliError("Usage: vigil monitors rm <id> --yes");
+    if (!id) throw new UsageError("Usage: vigil monitors rm <id> --yes");
     if (!bool(p.flags, "yes")) {
       throw new CliError("Deleting removes the monitor and its history. Re-run with --yes to confirm.");
     }
@@ -196,13 +200,13 @@ async function monitors(p: Parsed): Promise<void> {
     return;
   }
   if (sub === "check") {
-    if (!id) throw new CliError("Usage: vigil monitors check <id>");
+    if (!id) throw new UsageError("Usage: vigil monitors check <id>");
     const res = await trpcMutation("monitors.checkNow", { id });
     if (json) printJson(res ?? { queued: true });
     else say("Check queued.");
     return;
   }
-  throw new CliError(`Unknown subcommand "monitors ${sub}". Run: vigil --help`);
+  throw new UsageError(`Unknown subcommand "monitors ${sub}". Run: vigil --help`);
 }
 
 async function channels(p: Parsed): Promise<void> {
@@ -287,12 +291,20 @@ async function main(): Promise<void> {
     case "update":
       return update();
     default:
-      throw new CliError(`Unknown command "${cmd}". Run: vigil --help`);
+      throw new UsageError(`Unknown command "${cmd}". Run: vigil --help`);
   }
 }
 
 main().catch((err: unknown) => {
   const message = err instanceof CliError ? err.message : err instanceof Error ? err.message : String(err);
   log(`Error: ${message}`);
+  if (err instanceof UsageError) {
+    const cmd = process.argv[2];
+    const help = cmd ? topicHelp(cmd) : undefined;
+    if (help) {
+      log("");
+      log(help);
+    }
+  }
   process.exit(1);
 });

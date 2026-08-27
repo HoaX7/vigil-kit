@@ -119,7 +119,9 @@ The delivery log: where every alert and subscriber notice went.`,
 
   email: `vigil email [--json]
 
-Read only. The team's email senders. Configure them in the dashboard.`,
+Read only. Lists the custom email senders your alert and subscriber mail is
+sent from. With none configured, mail goes out from the default Vigil
+sender. Set up your own domain in the dashboard: ${DASH.email}`,
 
   team: `vigil team members [--json]
 vigil team invite <email> [--role member|admin]

@@ -9,6 +9,7 @@ export const DASH = {
   statusPages: `${DASHBOARD}/status-pages`,
   team: `${DASHBOARD}/account`,
   monitors: `${DASHBOARD}/monitors`,
+  email: `${DASHBOARD}/settings/email`,
 } as const;
 
 /**

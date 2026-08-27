@@ -1,14 +1,19 @@
 import { str, num, bool, type Parsed } from "./args.js";
-import { CliError, trpcMutation, trpcQuery } from "./http.js";
-import { printJson, say, table } from "./output.js";
+import { CliError, UsageError, trpcMutation, trpcQuery } from "./http.js";
+import { autoTable, printJson, renderKV, say, table } from "./output.js";
 import { readSpec, specOf } from "./spec.js";
 import { progress, step, trackStep } from "./ui.js";
 import { DASH, dashboardOnly } from "./links.js";
 
 function need(p: Parsed, index: number, usage: string): string {
   const v = p.positional[index];
-  if (!v) throw new CliError(`Usage: ${usage}`);
+  if (!v) throw new UsageError(`Usage: ${usage}`);
   return v;
+}
+
+function out(p: Parsed, data: unknown, human: () => void): void {
+  if (bool(p.flags, "json")) printJson(data);
+  else human();
 }
 
 export async function plan(p: Parsed): Promise<void> {
@@ -17,7 +22,13 @@ export async function plan(p: Parsed): Promise<void> {
     trpcQuery("org.usage"),
     trpcQuery("monitors.formOptions").catch(() => null),
   ]);
-  printJson({ subscription, usage, monitor_options: formOptions });
+  const data = { subscription, usage, monitor_options: formOptions };
+  out(p, data, () => {
+    const u = (usage ?? {}) as Record<string, unknown>;
+    renderKV(u);
+    const fo = (formOptions ?? {}) as { intervals?: number[] };
+    if (fo.intervals) say(`allowed_intervals          ${fo.intervals.join(", ")}`);
+  });
 }
 
 export async function overview(p: Parsed): Promise<void> {
@@ -29,11 +40,22 @@ export async function overview(p: Parsed): Promise<void> {
   ]);
   const byStatus: Record<string, number> = {};
   for (const m of monitors ?? []) byStatus[m.status ?? "unknown"] = (byStatus[m.status ?? "unknown"] ?? 0) + 1;
-  printJson({
+  const data = {
     team,
     usage,
     monitors: { total: (monitors ?? []).length, by_status: byStatus },
     open_incidents: incidents,
+  };
+  out(p, data, () => {
+    const t = (team ?? {}) as { name?: string; plan?: string };
+    const u = (usage ?? {}) as { active_monitors?: number; max_monitors?: number };
+    say(`Team      ${t.name ?? ""} (${t.plan ?? ""} plan)`);
+    say(`Monitors  ${u.active_monitors ?? (monitors ?? []).length}/${u.max_monitors ?? "?"} active — ${
+      Object.entries(byStatus).map(([k, v]) => `${v} ${k}`).join(", ") || "none"
+    }`);
+    const open = (incidents ?? []) as Record<string, unknown>[];
+    say(`Open incidents  ${open.length}`);
+    if (open.length > 0) autoTable(open, ["id", "monitor_name", "started_at"]);
   });
 }
 
@@ -51,7 +73,8 @@ export async function incidents(p: Parsed): Promise<void> {
     return;
   }
   if (sub === "get") {
-    printJson(await trpcQuery("incidents.get", { id: need(p, 2, "vigil incidents get <id>") }));
+    const row = await trpcQuery("incidents.get", { id: need(p, 2, "vigil incidents get <id>") });
+    out(p, row, () => renderKV(row));
     return;
   }
   if (sub === "ack" || sub === "resolve") {
@@ -64,11 +87,12 @@ export async function incidents(p: Parsed): Promise<void> {
   if (sub === "update") {
     const id = need(p, 2, 'vigil incidents update <id> --message "text"');
     const message = str(p.flags, "message");
-    if (!message) throw new CliError('Required: --message "text"');
-    printJson(await trpcMutation("incidents.addUpdate", { id, message }));
+    if (!message) throw new UsageError('Required: --message "text"');
+    const row = await trpcMutation("incidents.addUpdate", { id, message });
+    out(p, row, () => say("Update posted."));
     return;
   }
-  throw new CliError(`Unknown subcommand "incidents ${sub}". Run: vigil --help`);
+  throw new UsageError(`Unknown subcommand "incidents ${sub}". Run: vigil --help`);
 }
 
 export async function statusPages(p: Parsed): Promise<void> {
@@ -81,7 +105,8 @@ export async function statusPages(p: Parsed): Promise<void> {
     return;
   }
   if (sub === "get") {
-    printJson(await trpcQuery("statusPages.get", { id: need(p, 2, "vigil status-pages get <id>") }));
+    const row = await trpcQuery("statusPages.get", { id: need(p, 2, "vigil status-pages get <id>") });
+    out(p, row, () => renderKV(row));
     return;
   }
   if (sub === "create") {
@@ -95,22 +120,24 @@ export async function statusPages(p: Parsed): Promise<void> {
           description: str(p.flags, "description"),
         };
     if (!input["project_id"] || !input["slug"] || !input["title"]) {
-      throw new CliError("Required: --project <id> --slug <slug> --title <title> (or --spec). project_id must be the project id, see vigil projects list.");
+      throw new UsageError("Required: --project <id> --slug <slug> --title <title> (or --spec). project_id must be the project id, see vigil projects list.");
     }
     for (const k of Object.keys(input)) if (input[k] === undefined) delete input[k];
-    printJson(await trpcMutation("statusPages.create", input));
+    const row = (await trpcMutation("statusPages.create", input)) as { id?: string; slug?: string };
+    out(p, row, () => say(`Created status page "${input["title"]}" (${row.id ?? ""}) at https://tryvigil.dev/status/${row.slug ?? input["slug"]}`));
     return;
   }
   if (sub === "add-monitor") {
     const pageId = need(p, 2, "vigil status-pages add-monitor <page-id> <monitor-id>");
     const monitorId = need(p, 3, "vigil status-pages add-monitor <page-id> <monitor-id>");
-    printJson(await trpcMutation("statusPages.addMonitor", { status_page_id: pageId, monitor_id: monitorId }));
+    const added = await trpcMutation("statusPages.addMonitor", { status_page_id: pageId, monitor_id: monitorId });
+    out(p, added ?? { ok: true }, () => say("Monitor added to the page."));
     return;
   }
   if (sub === "rm" || sub === "delete" || sub === "archive") {
     dashboardOnly("Archiving or deleting a status page", DASH.statusPages);
   }
-  throw new CliError(`Unknown subcommand "status-pages ${sub}". Run: vigil status-pages --help`);
+  throw new UsageError(`Unknown subcommand "status-pages ${sub}". Run: vigil status-pages --help`);
 }
 
 export async function maintenance(p: Parsed): Promise<void> {
@@ -123,18 +150,21 @@ export async function maintenance(p: Parsed): Promise<void> {
     return;
   }
   if (sub === "get") {
-    printJson(await trpcQuery("maintenance.get", { id: need(p, 2, "vigil maintenance get <id>") }));
+    const row = await trpcQuery("maintenance.get", { id: need(p, 2, "vigil maintenance get <id>") });
+    out(p, row, () => renderKV(row));
     return;
   }
   if (sub === "create") {
-    printJson(await trpcMutation("maintenance.create", specOf(p)));
+    const row = (await trpcMutation("maintenance.create", specOf(p))) as { id?: string; title?: string };
+    out(p, row, () => say(`Maintenance window "${row.title ?? ""}" created (${row.id ?? ""}).`));
     return;
   }
   if (sub === "cancel" || sub === "complete") {
-    printJson(await trpcMutation(`maintenance.${sub}`, { id: need(p, 2, `vigil maintenance ${sub} <id>`) }));
+    const row = await trpcMutation(`maintenance.${sub}`, { id: need(p, 2, `vigil maintenance ${sub} <id>`) });
+    out(p, row ?? { ok: true }, () => say(sub === "cancel" ? "Maintenance cancelled." : "Maintenance completed."));
     return;
   }
-  throw new CliError(`Unknown subcommand "maintenance ${sub}". Run: vigil --help`);
+  throw new UsageError(`Unknown subcommand "maintenance ${sub}". Run: vigil --help`);
 }
 
 export async function bots(p: Parsed): Promise<void> {
@@ -147,14 +177,16 @@ export async function bots(p: Parsed): Promise<void> {
     return;
   }
   if (sub === "get") {
-    printJson(await trpcQuery("bots.get", { id: need(p, 2, "vigil bots get <id>") }));
+    const row = await trpcQuery("bots.get", { id: need(p, 2, "vigil bots get <id>") });
+    out(p, row, () => renderKV(row));
     return;
   }
   if (sub === "shards") {
-    printJson(await trpcQuery("bots.shards", { id: need(p, 2, "vigil bots shards <id>") }));
+    const rows = await trpcQuery("bots.shards", { id: need(p, 2, "vigil bots shards <id>") });
+    out(p, rows, () => autoTable((rows ?? []) as Record<string, unknown>[], ["id", "status", "latency_ms", "guilds", "last_ready_at"]));
     return;
   }
-  throw new CliError(`Unknown subcommand "bots ${sub}". Run: vigil --help`);
+  throw new UsageError(`Unknown subcommand "bots ${sub}". Run: vigil --help`);
 }
 
 interface DomainRow {
@@ -216,7 +248,8 @@ export async function domains(p: Parsed): Promise<void> {
   if (sub === "assign") {
     const id = need(p, 2, "vigil domains assign <id> <status-page-id>");
     const pageId = need(p, 3, "vigil domains assign <id> <status-page-id>");
-    printJson(await trpcMutation("customDomains.assign", { id, status_page_id: pageId }));
+    const row = await trpcMutation("customDomains.assign", { id, status_page_id: pageId });
+    out(p, row, () => say("Domain assigned to the status page."));
     return;
   }
   if (sub === "verify") {
@@ -254,29 +287,50 @@ export async function domains(p: Parsed): Promise<void> {
   if (sub === "rm" || sub === "remove") {
     dashboardOnly("Removing a custom domain", DASH.domains);
   }
-  throw new CliError(`Unknown subcommand "domains ${sub}". Run: vigil domains --help`);
+  throw new UsageError(`Unknown subcommand "domains ${sub}". Run: vigil domains --help`);
 }
 
 export async function email(p: Parsed): Promise<void> {
-  printJson(await trpcQuery("emailSender.list"));
+  const res = (await trpcQuery("emailSender.list", { limit: 50, offset: 0 })) as
+    | { items?: Record<string, unknown>[]; available?: boolean }
+    | null;
+  const rows = res?.items ?? [];
+  out(p, res, () => {
+    if (rows.length === 0) {
+      say("No custom email senders. Alert and subscriber mail goes out from the default Vigil sender.");
+      say(`Set up your own domain in the dashboard: ${DASH.email}`);
+      return;
+    }
+    autoTable(rows, ["id", "provider", "from_address", "purposes", "verified_at", "last_error"]);
+  });
 }
 
 export async function team(p: Parsed): Promise<void> {
   const sub = p.positional[1] ?? "members";
   if (sub === "members") {
-    printJson(await trpcQuery("team.members"));
+    const res = (await trpcQuery("team.members")) as { members?: Record<string, unknown>[]; invitations?: Record<string, unknown>[] } | null;
+    out(p, res, () => {
+      autoTable(res?.members ?? [], ["id", "name", "email", "role"]);
+      const invites = res?.invitations ?? [];
+      if (invites.length > 0) {
+        say("");
+        say("Pending invitations:");
+        autoTable(invites, ["email", "role", "status", "expiresAt"]);
+      }
+    });
     return;
   }
   if (sub === "invite") {
     const emailAddr = need(p, 2, "vigil team invite <email> [--role member|admin]");
     const role = str(p.flags, "role") ?? "member";
-    printJson(await trpcMutation("team.invite", { email: emailAddr, role }));
+    const row = await trpcMutation("team.invite", { email: emailAddr, role });
+    out(p, row, () => say(`Invited ${emailAddr} as ${role}.`));
     return;
   }
   if (sub === "remove" || sub === "role") {
     dashboardOnly("Changing or removing a member", DASH.team);
   }
-  throw new CliError(`Unknown subcommand "team ${sub}". Run: vigil team --help`);
+  throw new UsageError(`Unknown subcommand "team ${sub}". Run: vigil team --help`);
 }
 
 interface TeamRow {
@@ -315,7 +369,7 @@ export async function teams(p: Parsed): Promise<void> {
     say(`Active team is now ${hit.name ?? hit.slug ?? hit.id}.`);
     return;
   }
-  throw new CliError(`Unknown subcommand "teams ${sub}". Run: vigil teams --help`);
+  throw new UsageError(`Unknown subcommand "teams ${sub}". Run: vigil teams --help`);
 }
 
 export async function billing(p: Parsed): Promise<void> {
@@ -323,7 +377,31 @@ export async function billing(p: Parsed): Promise<void> {
     trpcQuery("billing.subscription"),
     trpcQuery("billing.capabilities").catch(() => null),
   ]);
-  printJson({ subscription, capabilities, manage_url: DASH.billing });
+  const data = { subscription, capabilities, manage_url: DASH.billing };
+  out(p, data, () => {
+    const sub = (subscription ?? {}) as {
+      plan?: string;
+      package_id?: string;
+      package?: { priceCentsMonthly?: number; includedSeats?: number };
+      seats?: { members?: number; memberSeats?: number; notifyMembers?: number; notifySeats?: number };
+      subscribers?: number;
+      lastPayment?: { amount?: number; currency?: string; payment_method?: string; created_at?: string };
+    };
+    say(`Plan          ${sub.plan ?? "free"} (${sub.package_id ?? ""})`);
+    if (sub.package?.priceCentsMonthly !== undefined) {
+      say(`Price         $${(sub.package.priceCentsMonthly / 100).toFixed(2)} per month`);
+    }
+    if (sub.seats) {
+      say(`Seats         ${sub.seats.members ?? 0}/${sub.seats.memberSeats ?? 0} members, ${sub.seats.notifyMembers ?? 0}/${sub.seats.notifySeats ?? 0} alert only`);
+    }
+    if (sub.subscribers !== undefined) say(`Subscribers   ${sub.subscribers}`);
+    const lp = sub.lastPayment;
+    if (lp?.amount !== undefined) {
+      say(`Last payment  $${(lp.amount / 100).toFixed(2)} ${lp.currency ?? ""} via ${lp.payment_method ?? ""} on ${(lp.created_at ?? "").slice(0, 10)}`);
+    }
+    say("");
+    say(`Payment methods, plan changes and invoices: ${DASH.billing}`);
+  });
 }
 
 export async function logs(p: Parsed): Promise<void> {
@@ -331,7 +409,8 @@ export async function logs(p: Parsed): Promise<void> {
   if (sub === "detail") {
     const audience = need(p, 2, "vigil logs detail <alert|subscriber> <id>");
     const id = need(p, 3, "vigil logs detail <alert|subscriber> <id>");
-    printJson(await trpcQuery("deliveryLog.detail", { audience, id }));
+    const row = await trpcQuery("deliveryLog.detail", { audience, id });
+    out(p, row, () => renderKV(row));
     return;
   }
   const input: Record<string, unknown> = {
@@ -342,7 +421,11 @@ export async function logs(p: Parsed): Promise<void> {
   const audience = str(p.flags, "audience");
   if (status) input["status"] = status;
   if (audience) input["audience"] = audience;
-  printJson(await trpcQuery("deliveryLog.list", input));
+  const res = (await trpcQuery("deliveryLog.list", input)) as { items?: Record<string, unknown>[]; total?: number } | null;
+  out(p, res, () => {
+    autoTable(res?.items ?? [], ["id", "audience", "kind", "status", "subject", "created_at"]);
+    if (typeof res?.total === "number") say(`${res.total} total`);
+  });
 }
 
 export async function subscribers(p: Parsed): Promise<void> {
@@ -353,25 +436,34 @@ export async function subscribers(p: Parsed): Promise<void> {
   if (status) input["status"] = status;
   const limit = num(p.flags, "limit");
   if (limit !== undefined) input["limit"] = limit;
-  printJson(await trpcQuery("subscribers.page", Object.keys(input).length ? input : undefined));
+  const res = (await trpcQuery("subscribers.page", Object.keys(input).length ? input : undefined)) as
+    | { items?: Record<string, unknown>[]; total?: number }
+    | null;
+  out(p, res, () => {
+    autoTable(res?.items ?? [], ["id", "kind", "destination", "status", "created_at"]);
+    if (typeof res?.total === "number") say(`${res.total} total`);
+  });
 }
 
 export async function channelsExtra(p: Parsed, sub: string): Promise<void> {
   if (sub === "catalog") {
-    printJson(await trpcQuery("channels.catalog"));
+    const cat = (await trpcQuery("channels.catalog")) as { integrations?: Record<string, unknown>[] } | null;
+    out(p, cat, () => autoTable(cat?.integrations ?? [], ["kind", "label", "group", "available", "coming_soon"]));
     return;
   }
   if (sub === "create") {
-    printJson(await trpcMutation("channels.create", specOf(p)));
+    const row = (await trpcMutation("channels.create", specOf(p))) as { id?: string; name?: string };
+    out(p, row, () => say(`Channel "${row.name ?? ""}" created (${row.id ?? ""}). Try it: vigil channels test ${row.id ?? "<id>"}`));
     return;
   }
   if (sub === "test") {
     const id = need(p, 2, "vigil channels test <id> [--event monitor_down|monitor_up|ssl_expiry]");
-    printJson(await trpcMutation("channels.testSend", { id, event: str(p.flags, "event") ?? "monitor_down" }));
+    const res = await trpcMutation("channels.testSend", { id, event: str(p.flags, "event") ?? "monitor_down" });
+    out(p, res ?? { ok: true }, () => say("Test alert sent."));
     return;
   }
   if (sub === "rm" || sub === "delete") {
     dashboardOnly("Deleting a channel", DASH.notifications);
   }
-  throw new CliError(`Unknown subcommand "channels ${sub}". Run: vigil channels --help`);
+  throw new UsageError(`Unknown subcommand "channels ${sub}". Run: vigil channels --help`);
 }
