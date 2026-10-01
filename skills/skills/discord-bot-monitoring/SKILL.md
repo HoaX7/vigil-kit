@@ -144,5 +144,9 @@ discord.py sketch: run the loop as a background task
 
 - Monitoring alerts (where incidents get sent: email, Discord webhook, Slack)
   are configured in the Vigil dashboard under Alerts, not in code.
+- Once alerting is set up, prove it delivers before calling the setup done:
+  `vigil channels list --json`, then `vigil channels test <id> --json` for each
+  channel, and ask the user to confirm the alert arrived. A created channel is
+  not a working channel. See the `uptime-monitoring` skill for the CLI.
 - Regenerating the token in the dashboard invalidates the old one immediately;
   redeploy with the new value and reporting resumes.

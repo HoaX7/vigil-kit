@@ -101,11 +101,69 @@ vigil channels create --spec - --json <<'EOF'
 EOF
 ```
 
-Verify with `vigil channels test <id>`. Slack's two click OAuth setup and the
-Twilio backed SMS and WhatsApp channels need the dashboard at
-https://tryvigil.dev/dashboard/notifications; point the user there for those.
-Monitors with no explicitly attached channels alert through every enabled
-channel in the team, so one channel is enough to start.
+Slack's two click OAuth setup and the Twilio backed SMS and WhatsApp channels
+need the dashboard at https://tryvigil.dev/dashboard/notifications; point the
+user there for those. Monitors with no explicitly attached channels alert
+through every enabled channel in the team, so one channel is enough to start.
+
+## Step 6: Prove what you created actually works
+
+Creating something is not evidence it works. A monitor can point at the wrong
+URL and a channel can be created with a dead webhook, and both look fine in a
+list. Run these checks before telling the user the setup is done, every time
+you add or change a monitor or a channel.
+
+### Every new or changed monitor
+
+```bash
+vigil monitors check <id>
+vigil monitors get <id> --json
+```
+
+`check` schedules an immediate check instead of waiting for the next interval.
+The result lands a few seconds later, so poll `monitors get` until `status`
+leaves `pending`: `healthy` means the target answered and matched the
+expectations, `down` or `degraded` means it did not. On `down`, read the
+monitor's latest incident (`vigil incidents list --json`) for the reason, fix
+the target, status codes or body expectation, and check again. A monitor that
+is `down` because the service really is down is a correct monitor; say which
+of the two it is.
+
+Push monitors (cron jobs, heartbeats) cannot be checked this way: they wait to
+be pinged. Verify by calling the ping URL once by hand, then confirm the
+monitor turns `healthy`.
+
+```bash
+curl -fsS https://api.tryvigil.dev/ping/<ping_token>
+```
+
+### Every new or reconnected alert channel
+
+```bash
+vigil channels list --json
+vigil channels test <id> --json
+```
+
+`channels test` delivers a real notification through that channel, shaped like
+a `monitor_down` alert; `--event monitor_up` or `--event ssl_expiry` sends the
+other shapes. Do this for channels the user just connected in the dashboard
+too, not only the ones you created from the terminal: Slack OAuth, SMS and
+WhatsApp are set up there and fail in their own ways.
+
+Then ask the user to confirm the alert showed up in the inbox, Slack channel,
+chat or endpoint. A successful command means Vigil handed the message off;
+only the user seeing it proves delivery. If the send fails, the error says
+why: fix the config and test again, or send the user to
+https://tryvigil.dev/dashboard/notifications for a dashboard only channel.
+`vigil logs --json` is the alert delivery log when a failure needs chasing.
+
+### Custom status page domains
+
+`vigil domains verify <id>` polls until the domain is live, so a domain is
+only set up once verify has passed.
+
+Report what you tested and what each test returned. Never report monitoring or
+alerting as working on the strength of a create call alone.
 
 ## Everything else the CLI can answer
 
@@ -158,6 +216,10 @@ signed in email from `vigil whoami --json`, never the session token.
    Ask the user before deleting anything you did not just create.
 5. If a command fails with "Not logged in" or "Session expired", run
    `vigil login` again; the stored session has an expiry.
+6. Nothing is done until it has been tested. A new monitor gets
+   `vigil monitors check <id>` and a status read; a new or reconnected channel
+   gets `vigil channels test <id> --json` plus the user confirming the alert
+   arrived.
 
 ## Troubleshooting
 
