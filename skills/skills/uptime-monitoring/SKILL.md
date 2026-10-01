@@ -49,35 +49,130 @@ vigil projects create "Production" --json
 Every monitor belongs to a project. Reuse an existing one when it matches;
 `--project` accepts the id, slug or name.
 
-## Step 4: Check for an existing monitor first
+## Step 4: Read what already exists before creating anything
 
-Nothing stops two monitors watching the same thing: the server accepts the
-duplicate, and the user pays for it twice against their plan's monitor cap
-while every incident alerts twice. So search before you create.
+Always list first, then create. Some of these the server refuses as a
+duplicate, some it accepts and bills, and two of them silently steal a
+resource from somewhere else, so the list is not optional. Everything below is
+scoped to the ACTIVE team: run `vigil teams` when the user has several, because
+the thing you are about to duplicate may live in another one.
+
+### Monitors: nothing stops a duplicate
+
+The server accepts a second monitor on the same target. It costs the user a
+slot against the plan's monitor cap and alerts twice on every incident.
 
 ```bash
 vigil monitors list --search api.example.com --json
 ```
 
-`--search` matches the name and the target, case insensitive, across every
-project in the team. Search the hostname rather than the full URL, so a
-different path or scheme still shows up. HTTP targets are stored with a
-scheme (a bare host is saved as `https://<host>`), which is what you compare
-against.
+- Matches name and target, case insensitive, across every project in the team.
+- Search the hostname, not the full URL: `http://` vs `https://`, a trailing
+  slash, `www.` vs apex and a different path are all stored verbatim and are
+  all near duplicates worth telling the user about.
+- HTTP targets are saved with a scheme, so a bare `example.com` is stored as
+  `https://example.com`.
+- The default page is 25 rows. Read `total` in the JSON and page with
+  `--offset` before concluding nothing matches.
+- Discord bot shards are deliberately absent from this list; they are reached
+  through `vigil bots list`.
+- A match that is `paused` or `suspended` is still a match. Resume it
+  (`vigil monitors resume <id>`) rather than creating a replacement; a
+  suspended monitor usually means the plan's cap was exceeded, so creating
+  another will not help.
 
-If a monitor already covers the same target and kind, do not create a second
-one. Tell the user it exists, with its name, id, project, kind, interval and
-current status, and ask what they want:
+Report the match with its name, id, project, kind, interval and status, then
+offer: leave it, change it (`vigil monitors update <id> --spec -`), or add a
+second one deliberately. A second one is legitimate when it is genuinely
+different: another path, another interval, another region, an `ssl` check
+beside an existing `http` check on the same host, a different DNS record type
+on the same name, or a different port.
 
-- leave it as it is
-- change it (`vigil monitors update <id> --spec -`), for a tighter interval or
-  a stricter assertion
-- add a second one anyway, which is reasonable when it is genuinely different:
-  another path, another interval, another region, or an `ssl` check next to an
-  existing `http` check on the same host
+### Alert channels: the server refuses the duplicate, so test instead
 
-The same applies to channels: `vigil channels list --json` before creating one,
-so the user does not end up with two webhooks to the same URL alerting twice.
+```bash
+vigil channels list --json
+```
+
+The server compares the channel's destination within the same kind, lowercased
+and with trailing slashes stripped, and refuses with `That destination is
+already used by "<name>"`. Treat that error as the answer, not a problem: tell
+the user the channel already exists and send a test through the existing one
+(`vigil channels test <id> --json`) instead of trying to force a second.
+
+What the server does NOT catch, so check it yourself before creating:
+
+- Email channels take a list of recipients and are not deduplicated at all. Two
+  email channels to the same address both fire.
+- The same URL registered under a different kind (a Mattermost webhook also
+  added as a plain `webhook`) is allowed and alerts twice.
+- URLs that differ only by query string or path are different destinations.
+- Reconnecting Slack or Telegram from the dashboard mints a new webhook or
+  binding, so the same Slack channel can end up with two Vigil channels. Check
+  the names in `channels list` before pointing the user at a reconnect.
+
+Other refusals to relay rather than retry: a `coming_soon` integration, a kind
+the plan does not include, and SMS or WhatsApp before Twilio is connected
+(`Connect your Twilio account first, under Settings → Configuration`).
+
+### Status pages: slugs are global, and adding a monitor MOVES it
+
+```bash
+vigil status-pages list --json
+```
+
+- A slug is unique across all of Vigil, not just this team, and the server
+  answers `the slug "x" is already taken, choose another`. The holder may be
+  another team's page, so a clash can happen on a slug the user cannot see.
+  Suggest a more specific slug rather than retrying variations blindly.
+- The plan caps how many pages a team gets.
+- A monitor lives on exactly one page. `vigil status-pages add-monitor` on a
+  monitor that is already published MOVES it: it disappears from the old page.
+  The response says `moved: true`. Check `vigil status-pages get <id> --json`
+  for both pages first and ask the user before moving anything, and say which
+  page it left.
+- An archived or suspended page refuses new monitors; reactivating it is a
+  dashboard action.
+
+### Custom domains: hostnames are global, and a page holds one
+
+```bash
+vigil domains list --json
+```
+
+- A hostname can only be connected once in all of Vigil. The server answers
+  `That domain is already connected to a status page.` and deliberately does
+  not say who holds it. If it is not in the user's own `domains list`, it is
+  another team's: tell the user that plainly and point at
+  support@tryvigil.dev. Do not guess.
+- A status page holds at most one domain. Assigning a second domain to the
+  same page silently unassigns the first one and takes it off the air. Read
+  `domains list` for the page's current domain and confirm with the user
+  before assigning.
+- Custom domains need a paid plan.
+- `add` only prints DNS records; the domain is live when
+  `vigil domains verify <id>` passes. Removing a domain is dashboard only.
+
+### Projects
+
+```bash
+vigil projects list --json
+```
+
+Slugs are unique per team and the server surfaces the clash as a raw database
+error, not a friendly message. Reuse the matching project instead; `--project`
+accepts its id, slug or name.
+
+### Maintenance windows
+
+```bash
+vigil maintenance list --json
+```
+
+Creating a window announces it to the status page subscribers immediately, and
+nothing stops an identical second window, so a careless retry emails everyone
+twice. Check the list for a window covering the same monitors and times before
+creating one, and never retry a create that may have succeeded; list first.
 
 ## Step 5: Create monitors
 
@@ -176,7 +271,8 @@ vigil channels test <id> --json
 
 `channels test` delivers a real notification through that channel, shaped like
 a `monitor_down` alert; `--event monitor_up` or `--event ssl_expiry` sends the
-other shapes. Do this for channels the user just connected in the dashboard
+other shapes. A channel that already existed gets tested too: that is the whole
+answer when the user asked for a channel Vigil refused as a duplicate. Do this for channels the user just connected in the dashboard
 too, not only the ones you created from the terminal: Slack OAuth, SMS and
 WhatsApp are set up there and fail in their own ways.
 
@@ -246,9 +342,11 @@ signed in email from `vigil whoami --json`, never the session token.
    Ask the user before deleting anything you did not just create.
 5. If a command fails with "Not logged in" or "Session expired", run
    `vigil login` again; the stored session has an expiry.
-6. Search before you create. `vigil monitors list --search <host> --json` and
-   `vigil channels list --json` first; report a match instead of adding a
-   duplicate.
+6. List before you create, for monitors, channels, status pages, domains,
+   projects and maintenance windows alike. Report the existing one and test it
+   instead of adding a duplicate. Two actions take a resource from elsewhere
+   with no warning: adding a published monitor to another status page moves
+   it, and assigning a second domain to a page unassigns the first.
 7. Nothing is done until it has been tested. A new monitor gets
    `vigil monitors check <id>` and a status read; a new or reconnected channel
    gets `vigil channels test <id> --json` plus the user confirming the alert
