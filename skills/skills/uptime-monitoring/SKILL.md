@@ -49,7 +49,37 @@ vigil projects create "Production" --json
 Every monitor belongs to a project. Reuse an existing one when it matches;
 `--project` accepts the id, slug or name.
 
-## Step 4: Create monitors
+## Step 4: Check for an existing monitor first
+
+Nothing stops two monitors watching the same thing: the server accepts the
+duplicate, and the user pays for it twice against their plan's monitor cap
+while every incident alerts twice. So search before you create.
+
+```bash
+vigil monitors list --search api.example.com --json
+```
+
+`--search` matches the name and the target, case insensitive, across every
+project in the team. Search the hostname rather than the full URL, so a
+different path or scheme still shows up. HTTP targets are stored with a
+scheme (a bare host is saved as `https://<host>`), which is what you compare
+against.
+
+If a monitor already covers the same target and kind, do not create a second
+one. Tell the user it exists, with its name, id, project, kind, interval and
+current status, and ask what they want:
+
+- leave it as it is
+- change it (`vigil monitors update <id> --spec -`), for a tighter interval or
+  a stricter assertion
+- add a second one anyway, which is reasonable when it is genuinely different:
+  another path, another interval, another region, or an `ssl` check next to an
+  existing `http` check on the same host
+
+The same applies to channels: `vigil channels list --json` before creating one,
+so the user does not end up with two webhooks to the same URL alerting twice.
+
+## Step 5: Create monitors
 
 Simple HTTP check:
 
@@ -89,7 +119,7 @@ Kinds: `http`, `ssl`, `dns`, `tcp`, `udp`, `ping`, `push`.
 
 Verify with `vigil monitors list --json`.
 
-## Step 5: Alerts
+## Step 6: Alerts
 
 `vigil channels list --json` shows what is configured; `vigil channels
 catalog --json` shows every integration with its plan availability. Simple
@@ -106,7 +136,7 @@ need the dashboard at https://tryvigil.dev/dashboard/notifications; point the
 user there for those. Monitors with no explicitly attached channels alert
 through every enabled channel in the team, so one channel is enough to start.
 
-## Step 6: Prove what you created actually works
+## Step 7: Prove what you created actually works
 
 Creating something is not evidence it works. A monitor can point at the wrong
 URL and a channel can be created with a dead webhook, and both look fine in a
@@ -216,7 +246,10 @@ signed in email from `vigil whoami --json`, never the session token.
    Ask the user before deleting anything you did not just create.
 5. If a command fails with "Not logged in" or "Session expired", run
    `vigil login` again; the stored session has an expiry.
-6. Nothing is done until it has been tested. A new monitor gets
+6. Search before you create. `vigil monitors list --search <host> --json` and
+   `vigil channels list --json` first; report a match instead of adding a
+   duplicate.
+7. Nothing is done until it has been tested. A new monitor gets
    `vigil monitors check <id>` and a status read; a new or reconnected channel
    gets `vigil channels test <id> --json` plus the user confirming the alert
    arrived.
